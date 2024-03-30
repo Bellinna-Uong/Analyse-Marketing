@@ -1,0 +1,192 @@
+---
+title: "Analyse marketing"
+output:
+  word_document: default
+  pdf_document: default
+date: "2024-01-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Importation du fichier CSV
+ifood_df <- read.csv("C:/Users/belli/OneDrive/Bureau/Self learning/Data/Kaggle/Marketing Analytics/ifood_df.csv")
+data_marketing <- ifood_df
+head(data_marketing)
+```
+Cet ensemble de données consiste en des données de la société XYZ sur les profils des clients, les préférences en matière de produits, les succès/échecs des campagnes et les performances des canaux de distribution.
+
+Ces données nous seront utiles pour produire un modèle prédictif pour estimer la probabilité qu'un client réponde favorablement à une campagne future. Ainsi, nous pourrons étudier à optimiser les futurs efforts de marketing en fonction des enseignements tirés des données.
+
+Le nombre de campagnes acceptés au total sera notre variable expliquée.
+
+```{r}
+nombre_de_variables <- ncol(data_marketing)
+nombre_d_observations <- nrow(data_marketing)
+cat("Nous avons un nombre de variables de :", nombre_de_variables, "\n")
+cat("Nous avons un nombre d'observations de :", nombre_d_observations, "\n")
+```
+Nous allons identifier si nous avons des valeurs nulles, c'est-à-dire des valeurs manquantes dans notre base de données, qui peuvent être suite à un manque d'information.
+
+```{r}
+nombre_valeurs_manquantes <- sum(is.na(data_marketing))
+cat("Le nombre total de valeurs manquantes est :", nombre_valeurs_manquantes, "\n")
+
+```
+
+```{r}
+summary(data_marketing)
+```
+Nous pouvons étudier la clientèle des six dernières campagnes de l'entreprise :
+
+Nous pouvons voir ici que la plage de revenu varie de 1 730 à 113 734, avec une moyenne d'environ 51 622. Il y a une variation importante dans les niveaux de revenu des individus dans l'échantillon.
+
+La plupart des clients n'ont pas d'enfants à charge, les valeurs médianes et du 1er quartile étant toutes deux égales à zéro.
+
+L'âge des clients varie de 24 à 80 ans, avec une moyenne d'environ 51 ans.
+
+
+```{r}
+#Création d'un modèle avec le nombre d'acceptation total de campagne en tant que variable expliquée.
+
+library(leaps)
+
+Modèle1 <- regsubsets(
+  AcceptedCmpOverall~Income + Kidhome + Teenhome + Recency + MntWines + MntFruits
+  + MntMeatProducts + MntSweetProducts + MntGoldProds + NumDealsPurchases +
+    NumCatalogPurchases + NumStorePurchases + NumWebVisitsMonth + AcceptedCmp3
+  + AcceptedCmp4 + AcceptedCmp5 + AcceptedCmp1 + AcceptedCmp2 + Complain + 
+    Z_CostContact + Z_Revenue + Response + Age + Customer_Days + marital_Divorced 
+  + marital_Married + marital_Single + marital_Together + marital_Widow +
+    education_2n.Cycle + education_Basic + education_Graduation + education_Master
+  + education_PhD + MntTotal + MntRegularProds, data = data_marketing, 
+  nvmax = ncol(data_marketing), method = "exhaustive", really.big = TRUE
+  )
+```
+La sortie indique que le modèle considéré a des dépendances linéaires entre certaines variables. Les dépendances linéaires peuvent poser des problèmes lors de la modélisation. Nous allons tout d'abord vérifier les corrélations.
+
+```{r}
+cor(data_marketing)
+```
+En examinant la matrice de corrélation fournie, voici quelques paires de variables avec des corrélations importantes (en valeur absolue) :
+
+Incom et MntTotal (corr = 0,823)
+MntWines et MntTotal (corr = 0.9617)
+MntMeatProducts et MntTotal (corr = 0.9435)
+MntFruits et MntTotal (corr = 0.9288)
+MntSweetProducts et MntTotal (corr = 0.9079)
+MntFishProducts et MntTotal (corr = 0.8875)
+
+Pour éviter des erreurs de modèles, nous allons omettre les variables suivantes : MntWines,MntMeatProducts, MntFruits,MntSweetProducts,MntFishProducts, MntRegularProds, AcceptedCmp1, AcceptedCmp2, AcceptedCmp3, AcceptedCmp4, AcceptedCmp5, Income.
+
+De plus, certaines variables telles que Z_CostContact et Z_Revenue ne semblent pas contribuer à la variance des autres variables et pourraient être retirées.
+
+```{r}
+# Nous utilisons la méthode de régularisation ridge pour aider à traiter les dépendances linéaires.
+library(glmnet)
+# Création de la matrice de conception X et du vecteur de réponse y
+X <- model.matrix(AcceptedCmpOverall~Income + Kidhome + Teenhome + Recency + 
+                    MntWines + MntFruits + MntMeatProducts + MntSweetProducts + 
+                    MntGoldProds + NumDealsPurchases + NumCatalogPurchases + 
+                    NumStorePurchases + NumWebVisitsMonth + Complain + Response
+                  + Age + Customer_Days + marital_Divorced + marital_Married +
+                    marital_Single + marital_Together + marital_Widow + 
+                    education_2n.Cycle + education_Basic + education_Graduation +
+                    education_Master + education_PhD, data = data_marketing)[,-1]
+
+y <- data_marketing$AcceptedCmpOverall
+
+# Ajustement du modèle ridge
+ridge_model <- cv.glmnet(X, y, alpha = 0)  # alpha = 0 pour la régression ridge
+# Obtention du meilleur modèle
+meilleur_model <- glmnet(X, y, alpha = 0, lambda = ridge_model$lambda.min)
+
+# Affichage des coefficients
+coef(meilleur_model)
+
+```
+
+
+```{r}
+# Création de modèle linéaire
+modele_lm <- lm(AcceptedCmpOverall~Income + Kidhome + Teenhome + Recency +
+                  MntWines + MntFruits + MntMeatProducts + MntSweetProducts + 
+                  MntGoldProds + NumDealsPurchases + NumCatalogPurchases +
+                  NumStorePurchases + NumWebVisitsMonth + Complain + Response +
+                  Age + Customer_Days + marital_Divorced + marital_Married + 
+                  marital_Single + marital_Together + marital_Widow + education_2n.Cycle
+                + education_Basic + education_Graduation + education_Master
+                + education_PhD, data = data_marketing)
+summary(modele_lm)
+```
+La valeur de R² est 0,431, ce qui signifie que le modèle explique environ 43,1% de la variance totale dans la variable dépendante. Cela  suggère que le modèle explique une proportion significative de la variabilité observée.
+
+Le test F évalue la significativité globale du modèle. Avec une statistique F de 66,01 et une p-valeur très proche de zéro (p-value : < 2.2e-16), cela suggère que le modèle dans son ensemble est statistiquement significatif. En d'autres termes, au moins une des variables indépendantes a un effet significatif sur la variable dépendante.
+
+
+L'analyse révèle des tendances significatives : chaque adolescent supplémentaire dans le ménage est associé à une diminution de 0,059 dans l'acceptation de la campagne marketing. De même, chaque achat de promotions est lié à une réduction de 0,0366 dans cette acceptation, et chaque achat en magasin entraîne une diminution de 0,02528. En revanche, les clients ayant accepté la dernière campagne présentent une augmentation significative de 0,6566 dans la variable dépendante. En termes d'éducation, des niveaux tels que 2nd Cycle, Basic et Graduation sont associés à des réponses plus élevées, soulignant l'influence significative de l'éducation sur les attitudes liées à la variable dépendante.
+
+```{r}
+shapiro.test(data_marketing$AcceptedCmpOverall)
+library(lmtest)
+bptest(modele_lm)
+library(car)
+durbinWatsonTest(modele_lm)
+```
+
+Pour un seuil de 5%, nous pouvons voir que ces trois tests sont validés, ainsi les résidus suivent une distribution normale, une absence d'hétéroscédasticité, puis les erreurs ne sont pas corrélées dans le temps, renforçant la validité des estimations et des intervalles de prédiction.
+
+
+
+```{r}
+library(ggplot2)
+
+# Diagramme en barres des réponses acceptées et non acceptées
+ggplot(data_marketing, aes(x = AcceptedCmpOverall)) +
+  geom_bar(fill = "grey") +
+  labs(title = "Distribution des Réponses",
+       x = "Nombre de réponse positive envers les campagnes publicitaires",
+       y = "Fréquence") +
+  theme_minimal()
+```
+#########################################
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+lieu<-data_marketing %>%
+  select(c('NumWebPurchases','NumCatalogPurchases','NumStorePurchases','NumWebVisitsMonth'))
+lieu_key_value <- pivot_longer(lieu, cols = everything(), names_to = "key", values_to = "value")
+
+ggplot(lieu_key_value, aes(value)) +
+geom_histogram(fill = 'brown', binwidth = 1) +
+facet_wrap(~key, scales = 'free_x', ncol = 2) +
+labs(title = "Histograms of Place Variables") +
+theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+Age_plot <- ggplot(data_marketing, aes(x = Age)) +
+  geom_histogram(fill = 'dodgerblue4', binwidth = 5) +
+  labs(title = "Histogramme des âges") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+print(Age_plot)
+```
+
+
+```{r}
+library(ggplot2)
+
+# Créer un nuage de points pour visualiser la corrélation entre l'âge et AcceptedCmpOverall
+ggplot(modele_lm, aes(x = Age, y = AcceptedCmpOverall)) +
+  geom_point() +  # Nuage de points
+  labs(x = "Âge", y = "AcceptedCmpOverall") +
+  ggtitle("Corrélation entre l'âge et AcceptedCmpOverall")
+
+```
+
